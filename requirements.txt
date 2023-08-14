@@ -1,0 +1,6 @@
+colorama
+multiprocessing
+passlib
+faker
+selenium
+selenium-wire
