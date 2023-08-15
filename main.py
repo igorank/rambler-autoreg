@@ -16,11 +16,19 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.expected_conditions import presence_of_element_located
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
+from selenium.common.exceptions import (ElementClickInterceptedException, TimeoutException,
+                                        NoSuchElementException, ElementNotInteractableException)
 
 fake = Faker('ru_RU')
 init()
 domains = ['@autorambler.ru', '@myrambler.ru', '@rambler.ru', '@rambler.ua', '@ro.ru']
+
+CAPTCHA_CLICKABLE_TEXT = ["Решить с 2Captcha", "API_CONNECTION_ERROR"]
+CAPTCHA_STATUS_MINUS_TEXT = ["Слишком много попыток регистрации. Попробуйте позже.",
+                             "API_HTTP_CODE_500", "API_HTTP_CODE_520",
+                             "API_HTTP_CODE_521", "Ошибка создания новой учётной записи."
+                                                  " Попробуйте повторить через 5 минут.",
+                             "ERROR_CAPTCHA_UNSOLVABLE"]
 
 
 class CaptchaError(Exception):
@@ -129,246 +137,124 @@ class Browser(webdriver.Chrome):
         return chrome_options
 
     def _activate_imap(self, name, domain_text, password, secret) -> None:
-        try:
-            self.get('https://mail.rambler.ru/settings/mailapps/change')
-            WebDriverWait(self, 60).until(EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
-            print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
-                  + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
-        except:
-            print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
-                  + Fore.RED + 'FAIL' + Style.RESET_ALL + Fore.BLUE)
+        self.get('https://mail.rambler.ru/settings/mailapps/change')
+
+        for _ in range(3):
+            if not self.__check_captcha_solver_presence():
+                raise CaptchaError("Captcha error")
+
+            if self._check_captcha_status():
+                WebDriverWait(self, 12).until(EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
+                print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
+                      + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
+                time.sleep(5)
+                return
+            else:
+                self.refresh()
+                continue
+
+        print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
+              + Fore.RED + 'FAIL' + Style.RESET_ALL + Fore.BLUE)
+
+    def __check_captcha_solver_presence(self) -> bool:
+        for _ in range(2):
+            try:
+                WebDriverWait(self, 12).until(
+                    EC.presence_of_element_located((By.XPATH, '//div[@class="captcha-solver captcha-solver_inner"]')))
+                return True
+            except (ElementNotInteractableException,
+                    NoSuchElementException, TimeoutException):
+                self.refresh()
+                continue
+        return False
+
+    def _check_captcha(self, timeout=65) -> int:
+        for _ in range(timeout):
+            try:
+                captcha_solver = self.find_element(By.CLASS_NAME, 'captcha-solver-info')
+                captcha_solver_text = captcha_solver.text
+
+                if captcha_solver_text in CAPTCHA_CLICKABLE_TEXT:
+                    captcha_solver.click()
+                elif captcha_solver_text == "Капча решена!":
+                    return 1
+                elif captcha_solver_text == "ERROR_SITEKEY":
+                    return 0
+                elif any(ele in captcha_solver_text for ele in CAPTCHA_STATUS_MINUS_TEXT):
+                    return 0  # default 0
+            except NoSuchElementException:
+                pass
+            time.sleep(1)
+        return -1
+
+    def _check_captcha_status(self) -> bool:
+        captcha_status = self._check_captcha()
+        if captcha_status == 1:
+            return True
+        else:
+            return False
 
     def run(self, name, domain_text, password, secret) -> str:
 
         self._setup_captcha_solver()
 
         self.get('https://id.rambler.ru/login-20/mail-registration')
-        WebDriverWait(self, 16).until(
-            EC.presence_of_element_located((By.XPATH,
-                                            '//*[@autocomplete="username"]')))
 
-        if domaincount != 3:
-            self.find_element(By.XPATH, '//*[@class="rui-Tooltip-anchor"]').click()
+        for _ in range(3):
+            WebDriverWait(self, 16).until(
+                EC.presence_of_element_located((By.XPATH,
+                                                '//*[@autocomplete="username"]')))
+
+            if domaincount != 3:
+                self.find_element(By.XPATH, '//*[@class="rui-Tooltip-anchor"]').click()
+                WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({domaincount})'))).click()
+
             WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({domaincount})'))).click()
+                (By.XPATH, '//*[@theme="[object Object]"][4]'))).click()
+            WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))).click()
 
-        WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@theme="[object Object]"][4]'))).click()
-        WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))).click()
+            WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+                (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::mailbox_name"]'))).send_keys(
+                name + Keys.TAB + Keys.TAB + password + Keys.TAB + password)
 
-        WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::mailbox_name"]'))).send_keys(
-            name + Keys.TAB + Keys.TAB + password + Keys.TAB + password)
+            WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+                (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::answer"]'))).send_keys(secret)
 
-        WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::answer"]'))).send_keys(secret)
-        try:
-            WebDriverWait(self, 75).until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, '//*[@data-cerber-id="login_form::main::login_button"]'))).click()  # TEMP
-        except TimeoutException:
-            raise CaptchaError("Captcha error")
+            if not self.__check_captcha_solver_presence():
+                raise CaptchaError("Captcha error")
 
-        if secret_in_log:
-            secret = f':{secret}'
-        else:
-            secret = ''
-
-        WebDriverWait(self, 10).until(
-            EC.presence_of_element_located((By.XPATH,
-                                            '//*[@data-cerber-id="registration_form::step_2::add_later"]'))).click()
-
-        if imap_activate:
-            self._activate_imap(name, domain_text, password, secret)
-        else:
-            print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}' + Style.RESET_ALL + Fore.BLUE)
-
-        return secret
-
-
-def main(args):
-    try:
-        num = 1
-        if use_proxy:
-            with open(args, 'r') as f:
-                proxy_list = f.read().splitlines()
-            proxy = random.choice(proxy_list)
-            proxy_options = {
-                "proxy": {
-                    "https": f"{proxy_type}://{proxy}"
-                }
-            }
-        else:
-            proxy_options = {
-                "proxy": {
-                    "no_proxy": "localhost,127.0.0.1"
-                }
-            }
-        domain_text = domains[domaincount - 1]
-        time.sleep(random.randint(1, 15))
-        password = generate_password(28)
-        name = generate_password(16)
-        secret = generate_password(8)
-        chrome_options = Options()
-        if captcha_service == 1:
-            chrome_options.add_extension("./anticaptcha-plugin_v0.63.crx")
-        elif captcha_service == 2:
-            chrome_options.add_extension("./Captcha-Solver.crx")
-        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-        driver = webdriver.Chrome(seleniumwire_options=proxy_options, options=chrome_options)
-        wait = WebDriverWait(driver, 10)
-        if captcha_service == 1:
-            for i in range(5):
+            if self._check_captcha_status():
                 try:
-                    driver.get('chrome-extension://lncaoejhfdpcafpkkcddpjnhnodcajfg/popup.html')
-                    time.sleep(1)
-                    driver.find_element(By.NAME, 'account_key').clear()
-                    time.sleep(1)
-                    driver.find_element(By.NAME, 'account_key').send_keys(token)
-                    time.sleep(1)
-                    driver.find_element(By.CSS_SELECTOR, '.btn.btn-primary').click()
-                    time.sleep(2)
-                    break
-                except:
-                    pass
-        elif captcha_service == 2:
-            for i in range(5):
-                try:
-                    driver.get('chrome-extension://ifibfemgeogfhoebkmokieepdoobkbpo/options/options.html')
-                    time.sleep(1)
-                    wait.until(presence_of_element_located((By.NAME, 'autoSolveHCaptcha'))).click()
-                    time.sleep(1)
-                    driver.find_element(By.NAME, 'apiKey').clear()
-                    time.sleep(1)
-                    driver.find_element(By.NAME, 'apiKey').send_keys(token)
-                    driver.find_element(By.ID, 'connect').click()
-                    time.sleep(1)
-                    driver.switch_to.alert.accept()
-                    time.sleep(2)
-                    break
-                except:
-                    pass
-        num = 2
-        for i in range(5):
-            try:
-                driver.get('https://id.rambler.ru/login-20/mail-registration')
-                wait.until(presence_of_element_located((By.XPATH, '//*[@autocomplete="username"]')))
-                break
-            except:
-                pass
+                    WebDriverWait(self, 12).until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, '//*[@data-cerber-id="login_form::main::login_button"]'))).click()  # TEMP
+                except TimeoutException:
+                    raise CaptchaError("Captcha error")
 
-        time.sleep(2)
-        num = 2.5
-        for i in range(5):
-            try:
-                if domaincount != 3:
-                    driver.find_element(By.XPATH, '//*[@class="rui-Tooltip-anchor"]').click()
-                    time.sleep(2)
-                    driver.find_element(By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({domaincount})').click()
-                    time.sleep(3)
-                    break
-            except:
-                pass
-        num = 3
-        for i in range(5):
-            try:
-                driver.find_element(By.XPATH, '//*[@theme="[object Object]"][4]').click()
-                time.sleep(2)
-                num = 4
-                driver.find_element(By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)').click()
-                time.sleep(1)
-                break
-            except:
-                pass
-        num = 5
-        driver.find_element(By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::mailbox_name"]').send_keys(
-            name + Keys.TAB + Keys.TAB + password + Keys.TAB + password)
-        time.sleep(2)
-        num = 6
-        driver.find_element(By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::answer"]').send_keys(
-            secret)
-        butttton_complete = WebDriverWait(driver, 75).until(
-            EC.element_to_be_clickable((By.XPATH, '//*[@data-cerber-id="login_form::main::login_button"]')))
-        time.sleep(1)
-        butttton_complete.click()
-        if secret_in_log:
-            secret = f':{secret}'
-        else:
-            secret = ''
-        if fill_personal_information:
-            try:
-                gender = random.randint(1, 2)
-                if gender == 1:
-                    bioname = fake.first_name_female()
-                    biosurname = fake.last_name_female()
+                if secret_in_log:
+                    secret = f':{secret}'
                 else:
-                    bioname = fake.first_name_male()
-                    biosurname = fake.last_name_male()
-                biocity = fake.city_name()
-                wait.until(presence_of_element_located(
-                    (By.XPATH, '//*[@data-cerber-id="registration_form::step_2::add_later"]')))
-                driver.find_element(By.ID, 'firstname').send_keys(bioname + Keys.TAB + biosurname)
-                time.sleep(1)
-                driver.find_element(By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_2::gender"]').click()
-                time.sleep(1)
-                driver.find_element(By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({gender})').click()
-                driver.find_element(By.ID, 'birthday').click()
-                time.sleep(1)
-                driver.find_element(By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({random.randint(1, 25)})').click()
-                driver.find_element(By.XPATH,
-                                    '//*[@class="rui-FormGroup-medium rui-FormGroup-normal rui-FormGroup-root"]/div/div/div/div[2]').click()
-                time.sleep(1)
-                driver.find_element(By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({random.randint(1, 12)})').click()
-                driver.find_element(By.XPATH,
-                                    '//*[@class="rui-FormGroup-medium rui-FormGroup-normal rui-FormGroup-root"]/div/div/div/div[3]').click()
-                time.sleep(1)
-                driver.find_element(By.CSS_SELECTOR,
-                                    f'.rui-Menu-content > :nth-child({random.randint(15, 30)})').click()
-                time.sleep(1)
-                driver.find_element(By.ID, 'geoid').send_keys(biocity)
-                wait.until(presence_of_element_located((By.CSS_SELECTOR, '.rui-Menu-content > :nth-child(1)'))).click()
-                time.sleep(1)
-                driver.find_element(By.XPATH, '//*[@data-cerber-id="registration_form::step_2::registration"]').click()
-            except:
-                driver.find_element(By.XPATH, '//*[@data-cerber-id="registration_form::step_2::add_later"]').click()
-        else:
-            wait.until(presence_of_element_located(
-                (By.XPATH, '//*[@data-cerber-id="registration_form::step_2::add_later"]'))).click()
-        time.sleep(1)
-        with open('result.txt', 'a', encoding='utf-8') as file:
-            file.write(f'{name}{domain_text}:{password}{secret}\n')
-        if imap_activate:
-            for attempt in range(1, 4):
-                try:
-                    driver.get('https://mail.rambler.ru/settings/mailapps/change')
-                    if attempt == 1:
-                        driver.refresh()
-                    WebDriverWait(driver, 60).until(EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
-                    time.sleep(1)
-                    print(
-                        Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP ' + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
-                    break
-                except:
-                    print(
-                        Style.RESET_ALL + Fore.RED + f'Error imap activate [{attempt} attempt]' + Style.RESET_ALL + Fore.BLUE)
-                    if attempt == 3:
-                        print(
-                            Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP ' + Fore.RED + 'FAIL' + Style.RESET_ALL + Fore.BLUE)
-                        break
-        else:
-            print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}' + Style.RESET_ALL + Fore.BLUE)
+                    secret = ''
 
-    except:
-        if num == 6:
-            print(Style.RESET_ALL + Fore.RED + f'Captcha error' + Style.RESET_ALL + Fore.BLUE)
-        else:
-            print(Style.RESET_ALL + Fore.RED + f'Unidentified error' + Style.RESET_ALL + Fore.BLUE)
-    finally:
-        driver.close()
-        driver.quit()
+                WebDriverWait(self, 10).until(
+                    EC.presence_of_element_located((By.XPATH,
+                                                    '//*[@data-cerber-id="registration_form::step_2::add_later"]'))).click()
+
+                if imap_activate:
+                    self._activate_imap(name, domain_text, password, secret)
+                else:
+                    print(
+                        Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}' + Style.RESET_ALL + Fore.BLUE)
+
+                return secret
+            else:
+                self.refresh()
+                continue
+
+        raise CaptchaError("Captcha error")
 
 
 # if __name__ == '__main__':
@@ -419,8 +305,8 @@ def main2():
         secret = browser.run(data['name'], data['domain_text'], data['password'], data['secret'])
     except CaptchaError as cap_error:
         print(Style.RESET_ALL + Fore.RED + str(cap_error) + Style.RESET_ALL + Fore.BLUE)
-    except Exception as ex:
-        print(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex}' + Style.RESET_ALL + Fore.BLUE)
+    # except Exception as ex:
+    #     print(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex}' + Style.RESET_ALL + Fore.BLUE)
     finally:
         browser.close()
         browser.quit()
