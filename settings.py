@@ -2,7 +2,6 @@ captcha_service = 2
 token = '223614b03c253976d837d0963a73d160'
 domaincount = 3
 imap_activate = True
-fill_personal_information = False
 secret_in_log = False
 use_proxy = False
 proxy_type = 'socks5'
