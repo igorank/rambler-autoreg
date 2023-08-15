@@ -14,7 +14,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.expected_conditions import presence_of_element_located
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (ElementClickInterceptedException, TimeoutException,
                                         NoSuchElementException, ElementNotInteractableException)
@@ -37,8 +36,8 @@ class CaptchaError(Exception):
 
 class Browser(webdriver.Chrome):
 
-    def __init__(self) -> None:
-        super().__init__(seleniumwire_options=self.__get_proxy_options(),
+    def __init__(self, args) -> None:
+        super().__init__(seleniumwire_options=self.__get_proxy_options(args),
                          options=self.__get_chrome_options())
 
     @staticmethod
@@ -103,10 +102,10 @@ class Browser(webdriver.Chrome):
             self.__settings_rucaptcha_solver()
 
     @staticmethod
-    def __get_proxy_options():
+    def __get_proxy_options(args):
 
         if use_proxy:
-            with open("proxy.txt", 'r') as f:
+            with open(args, 'r') as f:
                 proxy_list = f.read().splitlines()
             proxy = random.choice(proxy_list)
             proxy_options = {
@@ -257,49 +256,11 @@ class Browser(webdriver.Chrome):
         raise CaptchaError("Captcha error")
 
 
-# if __name__ == '__main__':
-#     text = (Fore.BLUE + '''
-# ██████╗░░█████╗░███╗░░░███╗██████╗░██╗░░░░░███████╗██████╗░
-# ██╔══██╗██╔══██╗████╗░████║██╔══██╗██║░░░░░██╔════╝██╔══██╗
-# ██████╔╝███████║██╔████╔██║██████╦╝██║░░░░░█████╗░░██████╔╝
-# ██╔══██╗██╔══██║██║╚██╔╝██║██╔══██╗██║░░░░░██╔══╝░░██╔══██╗
-# ██║░░██║██║░░██║██║░╚═╝░██║██████╦╝███████╗███████╗██║░░██║
-# ╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░░░░╚═╝╚═════╝░╚══════╝╚══════╝╚═╝░░╚═╝
-#
-#     ██████╗░███████╗░██████╗░███████╗██████╗░
-#     ██╔══██╗██╔════╝██╔════╝░██╔════╝██╔══██╗
-#     ██████╔╝█████╗░░██║░░██╗░█████╗░░██████╔╝
-#     ██╔══██╗██╔══╝░░██║░░╚██╗██╔══╝░░██╔══██╗
-#     ██║░░██║███████╗╚██████╔╝███████╗██║░░██║
-#     ╚═╝░░╚═╝╚══════╝░╚═════╝░╚══════╝╚═╝░░╚═╝
-#     '''
-#             + Style.RESET_ALL)
-#     os.system('cls')
-#     print(text)
-#
-#     threading = int(input(Style.RESET_ALL + Fore.BLUE + 'Threading: ' + Style.BRIGHT))
-#
-#     if use_proxy:
-#         proxypath = input(Style.RESET_ALL + Fore.BLUE + 'Path to proxy: ' + Style.BRIGHT)
-#         if not os.path.exists(proxypath):
-#             print(Style.RESET_ALL + Fore.RED + 'Proxy path not found')
-#             input()
-#             exit()
-#         else:
-#             a = [proxypath] * 9999999
-#     else:
-#         a = ['a'] * 9999999
-#
-#     p = Pool(processes=threading)
-#     p.map(main, a)
-#     input(Fore.BLUE + "Press enter to exit......" + Style.RESET_ALL)
-#     exit()
-
-def main2():
+def main(args):
     data = {'domain_text': domains[domaincount - 1], 'password': generate_password(28),
             'name': generate_password(16), 'secret': generate_password(8)}
 
-    browser = Browser()
+    browser = Browser(args)
 
     try:
         secret = browser.run(data['name'], data['domain_text'], data['password'], data['secret'])
@@ -316,4 +277,41 @@ def main2():
 
 
 if __name__ == '__main__':
-    main2()
+    text = (Fore.BLUE + '''
+██████╗░░█████╗░███╗░░░███╗██████╗░██╗░░░░░███████╗██████╗░
+██╔══██╗██╔══██╗████╗░████║██╔══██╗██║░░░░░██╔════╝██╔══██╗
+██████╔╝███████║██╔████╔██║██████╦╝██║░░░░░█████╗░░██████╔╝
+██╔══██╗██╔══██║██║╚██╔╝██║██╔══██╗██║░░░░░██╔══╝░░██╔══██╗
+██║░░██║██║░░██║██║░╚═╝░██║██████╦╝███████╗███████╗██║░░██║
+╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░░░░╚═╝╚═════╝░╚══════╝╚══════╝╚═╝░░╚═╝
+
+    ██████╗░███████╗░██████╗░███████╗██████╗░
+    ██╔══██╗██╔════╝██╔════╝░██╔════╝██╔══██╗
+    ██████╔╝█████╗░░██║░░██╗░█████╗░░██████╔╝
+    ██╔══██╗██╔══╝░░██║░░╚██╗██╔══╝░░██╔══██╗
+    ██║░░██║███████╗╚██████╔╝███████╗██║░░██║
+    ╚═╝░░╚═╝╚══════╝░╚═════╝░╚══════╝╚═╝░░╚═╝
+    '''
+            + Style.RESET_ALL)
+    os.system('cls')
+    print(text)
+
+    threading = int(input(Style.RESET_ALL + Fore.BLUE + 'Threading: ' + Style.BRIGHT))
+
+    if use_proxy:
+        proxypath = input(Style.RESET_ALL + Fore.BLUE + 'Path to proxy: ' + Style.BRIGHT)
+        if not os.path.exists(proxypath):
+            print(Style.RESET_ALL + Fore.RED + 'Proxy path not found')
+            input()
+            exit()
+        else:
+            a = [proxypath] * 9999999
+    else:
+        a = ['a'] * 9999999
+
+    p = Pool(processes=threading)
+    p.map(main, a)
+    input(Fore.BLUE + "Press enter to exit......" + Style.RESET_ALL)
+    exit()
+
+
