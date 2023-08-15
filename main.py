@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import traceback
 
 from colorama import init
 from colorama import Fore, Style
@@ -147,14 +148,13 @@ class Browser(webdriver.Chrome):
                     (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
                 print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
                       + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
-                time.sleep(5)
+                time.sleep(3)
                 return
             else:
                 self.refresh()
                 continue
 
-        print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
-              + Fore.RED + 'FAIL' + Style.RESET_ALL + Fore.BLUE)
+        raise CaptchaError("Captcha error")
 
     def __check_captcha_solver_presence(self) -> bool:
         for _ in range(2):
@@ -194,7 +194,7 @@ class Browser(webdriver.Chrome):
         else:
             return False
 
-    def run(self, name, domain_text, password, secret) -> str:
+    def run(self, name, domain_text, password, secret) -> None:
 
         self._setup_captcha_solver()
 
@@ -210,10 +210,21 @@ class Browser(webdriver.Chrome):
                 WebDriverWait(self, 6).until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({domaincount})'))).click()
 
-            WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+            try:
+                # WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
+                #                             '//input[@class="rui-RadioButton-real" and @value="question"]'))).click()
+                element = WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
+                                                                             '//input[@class="rui-RadioButton-real" and @value="question"]')))
+                self.execute_script("arguments[0].click();", element)
+            except TimeoutException:
+                pass
+
+            WebDriverWait(self, 5).until(EC.element_to_be_clickable(  # selenium.common.exceptions.TimeoutException
                 (By.XPATH, '//*[@theme="[object Object]"][4]'))).click()
-            WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))).click()
+            # WebDriverWait(self, 6).until(EC.element_to_be_clickable(
+            #     (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))).click()
+            self.execute_script("arguments[0].click();", WebDriverWait(self, 6).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))))
 
             WebDriverWait(self, 6).until(EC.element_to_be_clickable(
                 (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::mailbox_name"]'))).send_keys(
@@ -229,7 +240,7 @@ class Browser(webdriver.Chrome):
                 try:
                     WebDriverWait(self, 12).until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, '//*[@data-cerber-id="login_form::main::login_button"]'))).click()  # TEMP
+                            (By.XPATH, '//*[@data-cerber-id="login_form::main::login_button"]'))).click()
                 except TimeoutException:
                     raise CaptchaError("Captcha error")
 
@@ -239,16 +250,18 @@ class Browser(webdriver.Chrome):
                     secret = ''
 
                 WebDriverWait(self, 10).until(
-                    EC.presence_of_element_located((By.XPATH,
-                                                    '//*[@data-cerber-id="registration_form::step_2::add_later"]'))).click()
+                    EC.presence_of_element_located((By.XPATH, '//*[@data-cerber-id='
+                                                              '"registration_form::step_2::add_later"]'))).click()
 
                 if imap_activate:
                     self._activate_imap(name, domain_text, password, secret)
                 else:
-                    print(
-                        Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}' + Style.RESET_ALL + Fore.BLUE)
+                    print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}'
+                          + Style.RESET_ALL + Fore.BLUE)
 
-                return secret
+                with open('result.txt', 'a', encoding='utf-8') as file:
+                    file.write(f"{name}{domain_text}:{password}{secret}\n")
+                return
             else:
                 self.refresh()
                 continue
@@ -263,17 +276,15 @@ def main(args):
     browser = Browser(args)
 
     try:
-        secret = browser.run(data['name'], data['domain_text'], data['password'], data['secret'])
+        browser.run(data['name'], data['domain_text'], data['password'], data['secret'])
     except CaptchaError as cap_error:
         print(Style.RESET_ALL + Fore.RED + str(cap_error) + Style.RESET_ALL + Fore.BLUE)
-    # except Exception as ex:
-    #     print(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex}' + Style.RESET_ALL + Fore.BLUE)
+    except Exception as ex:
+        print(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex}' + Style.RESET_ALL + Fore.BLUE)
+        # print(str(traceback.format_exc()))  # DEBUG
     finally:
         browser.close()
         browser.quit()
-
-    with open('result.txt', 'a', encoding='utf-8') as file:
-        file.write(f"{data['name']}{data['domain_text']}:{data['password']}{secret}\n")
 
 
 if __name__ == '__main__':
@@ -313,5 +324,3 @@ if __name__ == '__main__':
     p.map(main, a)
     input(Fore.BLUE + "Press enter to exit......" + Style.RESET_ALL)
     exit()
-
-
