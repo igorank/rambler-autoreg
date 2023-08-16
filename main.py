@@ -7,7 +7,7 @@ from colorama import init
 from colorama import Fore, Style
 from multiprocessing import Pool
 from settings import token, imap_activate, domaincount, secret_in_log, captcha_service, \
-    use_proxy, proxy_type
+    use_proxy, proxy_type, headless
 from passlib.utils import generate_password
 from faker import Faker
 from seleniumwire import webdriver
@@ -67,10 +67,9 @@ class Browser(webdriver.Chrome):
         self.get(f"chrome-extension://{extension_id}/options/options.html")
         WebDriverWait(self, 10).until(
             EC.presence_of_element_located((By.XPATH,
-                                            "/html/body/div/div[1]/table/tbody/tr[1]/td[2]/input")))
+                                            '//input[@name="apiKey"]')))
         self.find_element("xpath",
-                          "/html/body/div/div[1]/table/tbody/tr[1]/td[2]/input").send_keys(
-            token)
+                          '//input[@name="apiKey"]').send_keys(token)
         WebDriverWait(self, 10).until(
             EC.presence_of_element_located(
                 (By.XPATH, '//*[@id="autoSolveHCaptcha"]')))
@@ -134,6 +133,13 @@ class Browser(webdriver.Chrome):
             chrome_options.add_extension("./Captcha-Solver.crx")
 
         chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        chrome_options.add_argument('--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                                    ' AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"')
+
+        if headless:
+            chrome_options.add_argument("--headless=chrome")  # new
+            # chrome_options.add_argument('--headless')
+
         return chrome_options
 
     def _activate_imap(self, name, domain_text, password, secret) -> None:
@@ -249,9 +255,12 @@ class Browser(webdriver.Chrome):
                 else:
                     secret = ''
 
-                WebDriverWait(self, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '//*[@data-cerber-id='
-                                                              '"registration_form::step_2::add_later"]'))).click()
+                try:
+                    WebDriverWait(self, 10).until(
+                        EC.presence_of_element_located((By.XPATH, '//*[@data-cerber-id='
+                                                                  '"registration_form::step_2::add_later"]'))).click()
+                except TimeoutException:    # Пройдите верификацию, пожалуйста
+                    raise CaptchaError("Captcha error")
 
                 if imap_activate:
                     self._activate_imap(name, domain_text, password, secret)
@@ -261,6 +270,7 @@ class Browser(webdriver.Chrome):
 
                 with open('result.txt', 'a', encoding='utf-8') as file:
                     file.write(f"{name}{domain_text}:{password}{secret}\n")
+
                 return
             else:
                 self.refresh()

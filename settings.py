@@ -1,4 +1,5 @@
 captcha_service = 2
+headless = False    # not working
 token = '223614b03c253976d837d0963a73d160'
 domaincount = 3
 imap_activate = True
