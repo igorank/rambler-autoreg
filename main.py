@@ -3,6 +3,7 @@ import time
 import random
 import traceback
 
+from datetime import datetime
 from colorama import init
 from colorama import Fore, Style
 from multiprocessing import Pool
@@ -33,6 +34,10 @@ CAPTCHA_STATUS_MINUS_TEXT = ["Слишком много попыток реги�
 
 class CaptchaError(Exception):
     pass
+
+
+def log(message: str):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
 
 
 class Browser(webdriver.Chrome):
@@ -152,8 +157,8 @@ class Browser(webdriver.Chrome):
             if self._check_captcha_status():
                 WebDriverWait(self, 12).until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
-                print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
-                      + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
+                log(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
+                    + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
                 time.sleep(3)
                 return
             else:
@@ -220,7 +225,7 @@ class Browser(webdriver.Chrome):
                 # WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
                 #                             '//input[@class="rui-RadioButton-real" and @value="question"]'))).click()
                 element = WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
-                                                                             '//input[@class="rui-RadioButton-real" and @value="question"]')))
+                                                                                       '//input[@class="rui-RadioButton-real" and @value="question"]')))
                 self.execute_script("arguments[0].click();", element)
             except TimeoutException:
                 pass
@@ -256,17 +261,17 @@ class Browser(webdriver.Chrome):
                     secret = ''
 
                 try:
-                    WebDriverWait(self, 10).until(
+                    WebDriverWait(self, 7).until(
                         EC.presence_of_element_located((By.XPATH, '//*[@data-cerber-id='
                                                                   '"registration_form::step_2::add_later"]'))).click()
-                except TimeoutException:    # Пройдите верификацию, пожалуйста
+                except TimeoutException:  # Пройдите верификацию, пожалуйста
                     raise CaptchaError("Captcha error")
 
                 if imap_activate:
                     self._activate_imap(name, domain_text, password, secret)
                 else:
-                    print(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}'
-                          + Style.RESET_ALL + Fore.BLUE)
+                    log(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret}'
+                        + Style.RESET_ALL + Fore.BLUE)
 
                 with open('result.txt', 'a', encoding='utf-8') as file:
                     file.write(f"{name}{domain_text}:{password}{secret}\n")
@@ -288,9 +293,9 @@ def main(args):
     try:
         browser.run(data['name'], data['domain_text'], data['password'], data['secret'])
     except CaptchaError as cap_error:
-        print(Style.RESET_ALL + Fore.RED + str(cap_error) + Style.RESET_ALL + Fore.BLUE)
+        log(Style.RESET_ALL + Fore.RED + str(cap_error) + Style.RESET_ALL + Fore.BLUE)
     except Exception as ex:
-        print(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex}' + Style.RESET_ALL + Fore.BLUE)
+        log(Style.RESET_ALL + Fore.RED + f'Unidentified error: {ex.__class__.__name__}' + Style.RESET_ALL + Fore.BLUE)
         # print(str(traceback.format_exc()))  # DEBUG
     finally:
         browser.close()
