@@ -152,11 +152,19 @@ class Browser(webdriver.Chrome):
 
         for _ in range(3):
             if not self.__check_captcha_solver_presence():
-                raise CaptchaError("Captcha error")
+                self.refresh()
+                continue
 
             if self._check_captcha_status():
                 WebDriverWait(self, 12).until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, '.MailAppsChange-submitWrapper-JZ > button'))).click()
+
+                try:
+                    WebDriverWait(self, 8).until(EC.invisibility_of_element_located(
+                        (By.XPATH, '//div[@class="rui-Popup-popup MailAppsChange-mailAppPopup-21"]')))
+                except TimeoutException:
+                    raise CaptchaError("Captcha error")
+
                 log(Style.RESET_ALL + Fore.BLUE + f'{name}{domain_text}:{password}{secret} | IMAP '
                     + Fore.GREEN + 'SUCCESS' + Style.RESET_ALL + Fore.BLUE)
                 time.sleep(3)
@@ -168,16 +176,13 @@ class Browser(webdriver.Chrome):
         raise CaptchaError("Captcha error")
 
     def __check_captcha_solver_presence(self) -> bool:
-        for _ in range(2):
-            try:
-                WebDriverWait(self, 12).until(
-                    EC.presence_of_element_located((By.XPATH, '//div[@class="captcha-solver captcha-solver_inner"]')))
-                return True
-            except (ElementNotInteractableException,
-                    NoSuchElementException, TimeoutException):
-                self.refresh()
-                continue
-        return False
+        try:
+            WebDriverWait(self, 12).until(
+                EC.presence_of_element_located((By.XPATH, '//div[@class="captcha-solver captcha-solver_inner"]')))
+            return True
+        except (ElementNotInteractableException,
+                NoSuchElementException, TimeoutException):
+            return False
 
     def _check_captcha(self, timeout=65) -> int:
         for _ in range(timeout):
@@ -245,7 +250,8 @@ class Browser(webdriver.Chrome):
                 (By.XPATH, '//*[@data-cerber-id="registration_form::mail::step_1::answer"]'))).send_keys(secret)
 
             if not self.__check_captcha_solver_presence():
-                raise CaptchaError("Captcha error")
+                self.refresh()
+                continue
 
             if self._check_captcha_status():
                 try:
