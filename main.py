@@ -227,18 +227,17 @@ class Browser(webdriver.Chrome):
                     (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child({domaincount})'))).click()
 
             try:
-                # WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
-                #                             '//input[@class="rui-RadioButton-real" and @value="question"]'))).click()
                 element = WebDriverWait(self, 6).until(EC.presence_of_element_located((By.XPATH,
-                                                                                       '//input[@class="rui-RadioButton-real" and @value="question"]')))
+                                                                                       '//input['
+                                                                                       '@class="rui-RadioButton-real" '
+                                                                                       'and @value="question"]')))
                 self.execute_script("arguments[0].click();", element)
             except TimeoutException:
                 pass
 
             WebDriverWait(self, 5).until(EC.element_to_be_clickable(  # selenium.common.exceptions.TimeoutException
                 (By.XPATH, '//*[@theme="[object Object]"][4]'))).click()
-            # WebDriverWait(self, 6).until(EC.element_to_be_clickable(
-            #     (By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))).click()
+
             self.execute_script("arguments[0].click();", WebDriverWait(self, 6).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, f'.rui-Menu-content > :nth-child(1)'))))
 
